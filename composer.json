@@ -2,7 +2,7 @@
 {
   "name": "antonkalmykov/piece",
   "type": "library",
-  "description": "ItCourses Framework Piece Component",
+  "description": "Simple template engine for ItCourses Framework",
   "keywords": [],
   "homepage": "https://github.com/kalmykovanton/Piece",
   "license": "MIT",
