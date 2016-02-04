@@ -1,3 +1,4 @@
+```php
 require __DIR__ . '/vendor/autoload.php';
 
 use HttpExchange\Common\Stream;
@@ -12,3 +13,4 @@ $view->render('view.php', ['name' => 'Name', 'lastname' => 'Lastname', 'header' 
 
 @template('template.php'); // way to template
 @embed; // where to insert view body
+```
