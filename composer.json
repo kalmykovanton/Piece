@@ -1,0 +1,22 @@
+
+{
+  "name": "antonkalmykov/Piece",
+  "type": "library",
+  "description": "ItCourses Framework Piece Component",
+  "keywords": [],
+  "homepage": "https://github.com/kalmykovanton/Piece",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Anton Kalmykov",
+      "email": "a.kalmykov@outlook.com"
+    }
+  ],
+  "require": {
+    "php": ">=5.5.9",
+    "antonkalmykov/http-exchange": "1.0.*"
+  },
+  "autoload": {
+    "psr-4": {"Piece\\": ""}
+  }
+}
