@@ -2,159 +2,251 @@
 
 namespace Piece;
 
-use InvalidArgumentException;
-use RuntimeException;
-use Piece\Abstraction\ViewEngineAbstract;
-use Piece\Helpers\ViewEngineHelper;
-use Psr\Http\Message\ResponseInterface;
+use \InvalidArgumentException;
+use \RuntimeException;
 
 /**
  * Class ViewEngine.
  * @package Piece
  */
-class ViewEngine extends ViewEngineAbstract
+class ViewEngine
 {
-    use ViewEngineHelper;
-
-     /**
+    /**
+     * Path to views folder.
      *
-     *
-     * @var ResponseInterface instance
+     * @var string
      */
-    private $response;
+    protected $viewsFolder = '';
 
-    // dummy
-    private $viewFolder = '';
+    /**
+     * Current view name.
+     *
+     * @var string
+     */
+    protected $viewName = '';
 
-    public function __construct(ResponseInterface $response)
+    /**
+     * Params given to the current view.
+     *
+     * @var array
+     */
+    protected $params = [];
+
+    /**
+     * Stores divided content
+     * derived from view file.
+     *
+     * @var array
+     */
+    protected $viewsParts = [];
+
+    /**
+     * Template name.
+     *
+     * @var string
+     */
+    protected $templateName = '';
+
+    /**
+     * Template engine settings.
+     *
+     * @var array
+     */
+    protected $settings;
+
+    /**
+     * ViewEngine constructor.
+     *
+     * @param array $settings   ViewEngine settings.
+     */
+    public function __construct(array $settings)
     {
-        $this->response = $response;
-
-        // dummy
-        $this->viewFolder = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'views' . DIRECTORY_SEPARATOR;
+        // check view engine settings
+        if (!
+            isset($settings['viewsFolder'], $settings['fileExtension'])
+        ) {
+            throw new RuntimeException(
+                'Some settings are not found, please, refer to documentation.');
+        }
+        // store given settings
+        $this->settings = $settings;
     }
 
     /**
-     * @param string $view
-     * @param array $params
-     * @param null|integer $statusCode
-     * @return string
+     * Render view over the transferred view filename
+     * and parameters.
+     *
+     * @param string $viewName      View name.
+     * @param array $params         View parameters.
+     * @return string               Rendered HTML.
      */
-    public function render($view, array $params = [], $statusCode = null)
+    public function render($viewName, array $params = [])
     {
-        //
-        if (! is_string($view)) {
+        // check if view name is a string
+        if (! is_string($viewName)) {
             throw new InvalidArgumentException('View name must be a string.');
         }
-
-        //
-        if (! $this->checkPath($this->viewFolder . $view) ) {
-            throw new RuntimeException('View not found in views directory.');
+        // filter views folder path
+        $this->viewsFolder = $this->filterPathToViewsFolder($this->settings['viewsFolder']);
+        // filter view name
+        $this->viewName = $this->filterFilename($viewName);
+        // check path to view
+        $this->checkPath($this->viewsFolder, $this->viewName);
+        // secure given params (if exists)
+        if (! empty($params)) {
+            $this->params = $this->secureParams($params);
         }
-
-        //
-        $this->viewName = $view;
-
-        //
-        $params = $this->secureParams($params);
-
-        //
-        $viewParts = [];
-
-        // подготавливем вьюху
-        $viewContent = $this->prepareView($params);
-
-        // Выбираем из вьюхи имя темплейта, тело вьюхи
-        $success = preg_match('/@template\(\'([a-zA-Z.\/]+)\'\);\s*((\s*.*\s*)*)/', $viewContent, $viewParts);
-
-        if (! $success) {
-            throw new RuntimeException('An error occurred while view parsing.');
-        }
-
-        // имя шаблона
-        $this->templateName = $viewParts[1];
-        // контент вьюхи
-        $insideContent = $viewParts[2];
-
-        //
-        $htmlContent = $this->prepareTemplate($insideContent, $params);
-
-        //
-        if (! is_null($statusCode)) {
-            $this->response = $this->response->withStatus($statusCode);
-        }
-
-        //
-        $this->response->getBody()->write($htmlContent);
-
-        //
-        $this->response->send();
+        // performs view file
+        $viewContent = $this->prepareView($this->params);
+        // separates content derived from the view
+        $this->viewsParts = $this->separateViewContent($viewContent);
+        // filter template name
+        $this->templateName = $this->filterFilename($this->viewsParts[1]);
+        // check path to tempalte
+        $this->checkPath($this->viewsFolder, $this->templateName);
+        // get view body
+        $viewBody = ($this->viewsParts[2]) ? $this->viewsParts[2] : '';
+        // render full HTML content
+        return $this->prepareTemplate($viewBody, $this->params);
     }
 
     /**
-     * @param array $params
-     * @return string
+     * This method import variables from given array
+     * of parameters (if exists) and performs view file content.
+     *
+     * @param array $params     Given parameters.
+     * @return string           View content.
      */
-    protected function prepareView(array $params = [])
+    protected function prepareView(array $params)
     {
-        // извлекаем переменные
-        if (! empty($params)) {
-            extract($params);
-        }
-
-        // подключаем вьюху
-        ob_start();
-        include $this->viewFolder . $this->viewName;
-        // закрываем буфер, сохраняем содержимое вьюхи
-        $content = ob_get_clean();
-
-        return $content;
+        return $this->compileHtml($this->viewsFolder, $this->viewName, $params);
     }
 
     /**
-     * @param string $inside
-     * @param array $params
-     * @return string
+     * This method import variables from given array
+     * of parameters (if exists), inject view body and
+     * performs tempalte file contents.
+     *
+     * @param string $viewBody  Current view's body.
+     * @param array $params     Given parameters.
+     * @return string           Rendered HTML.
+     * @throws RuntimeException on error while template parsing.
      */
-    protected function prepareTemplate($inside = '', array $params = [])
+    protected function prepareTemplate($viewBody, array $params)
     {
-        if (! is_string($inside)) {
-            throw new InvalidArgumentException('View body must be a string.');
-        }
+        // compile HTML
+        $templateContent = $this->compileHtml($this->viewsFolder, $this->templateName, $params);
 
-        //
-        if (! $this->checkPath($this->viewFolder . $this->templateName) ) {
-            throw new RuntimeException('Template not found in views directory.');
-        }
+        // replace include tag in template on view body content
+        $html = preg_replace('/@embed;/', $viewBody, $templateContent);
 
-        // извлекаем переменные
-        if (! empty($params)) {
-            extract($params);
-        }
-
-        //
-        ob_start();
-        include $this->viewFolder . $this->templateName;
-        $collectedContent = ob_get_clean();
-
-        $htmlContent = preg_replace('/@embed;/', $inside, $collectedContent);
-
-        if (! $htmlContent) {
+        if (! $html) {
             throw new RuntimeException('An error occurred while template parsing.');
         }
 
-        return $htmlContent;
+        return $html;
     }
 
     /**
-     * This is dummy method,
-     * it is not part of the PSR-7: HTTP message interfaces.
+     * This method inject given parameters into view
+     * or template files, perform internal зрз  scripts
+     * and compile html.
      *
-     * @param $name
-     * @param $value
+     * @param string $folderName    View's folder name.
+     * @param string $fileName      Filename.
+     * @param array $params         Given parameters.
+     * @return string               HTML.
      */
-    public function __set($name, $value)
+    protected function compileHtml($folderName, $fileName, array $params)
     {
-        // Dummy act.
+        // import variables from an array of parameters
+        if (! empty($params)) {
+            extract($params);
+        }
+        // start buffer
+        ob_start();
+        // include given file
+        include $folderName . $fileName;
+        // close buffer and return content
+        return ob_get_clean();
+    }
+
+    /**
+     * This method separates content derived from the view
+     * on two parts: template name and the main view content.
+     *
+     * @param string $viewContent   View body.
+     * @return array                Separated view body.
+     * @throws RuntimeException if arise error while view parsing.
+     */
+    protected function separateViewContent($viewContent)
+    {
+        $viewsParts = [];
+
+        if (
+            ! preg_match('/@template\(\'([a-zA-Z.\/]+)\'\);\s*((\s*.*\s*)*)/', $viewContent, $viewsParts)
+        ) {
+            throw new RuntimeException('An error occurred while view parsing.');
+        }
+
+        return $viewsParts;
+    }
+
+    /**
+     * Secure params given to the current view.
+     * Convert all applicable characters to HTML entities.
+     * @see https://en.wikipedia.org/wiki/Cross-site_scripting
+     * @see http://php.net/manual/en/function.htmlentities.php
+     *
+     * @param array $params     Given params.
+     * @return array            Filtered params.
+     */
+    protected function secureParams(array $params = [])
+    {
+        array_walk_recursive($params, function(&$value, $key){
+            $value = htmlentities($value, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
+        });
+
+        return $params;
+    }
+
+    /**
+     * Check if valid given path.
+     *
+     * @param string $pathToFolder     Path to views folder.
+     * @param string $filename         Filename.
+     * @throws InvalidArgumentException if not valid.
+     */
+    protected function checkPath($pathToFolder, $filename)
+    {
+        if (! file_exists($pathToFolder . $filename)) {
+            throw new RuntimeException(sprintf('Given path %s not valid.', $pathToFolder . $filename));
+        }
+    }
+
+    /**
+     * Filter given filename.
+     *
+     * @param string $filename  Filename.
+     * @return string           Filtered filename.
+     */
+    protected function filterFilename($filename)
+    {
+        return ltrim($filename, DIRECTORY_SEPARATOR) . $this->settings['fileExtension'];
+    }
+
+    /**
+     * Filter path to views folder.
+     *
+     * @param string $path      Path to views folder.
+     * @return string           Filtered path to views folder.
+     */
+    protected function filterPathToViewsFolder($path)
+    {
+        if (! is_string($path)) {
+            throw new InvalidArgumentException('Path to views folder must be a string.');
+        }
+
+        return rtrim($path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
     }
 }
