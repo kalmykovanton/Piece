@@ -1,4 +1,5 @@
-# Simple template engine component for ITCourses Jazz PHP framework
+# Piece
+Simple template engine component for ITCourses Jazz PHP framework
 ## How to use
 First of all, create an array of settings for Piece component:
 ```php
